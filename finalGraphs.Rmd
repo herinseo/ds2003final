@@ -1,0 +1,123 @@
+---
+title: "Final Project Graphs"
+output:
+  html_document:
+    number_sections: no
+    toc: yes
+    toc_float: yes
+    code_folding: show
+runtime: shiny    
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+library(knitr)
+library(tidyverse)
+library(tidyr)
+library(plotly)
+library(foreign)
+library(shiny)
+library(ggplot2)
+```
+
+
+
+```{r}
+data <- read.csv("/Users/herinseo/Downloads/Inequality in Education.csv")
+```
+    
+```{r}
+# Create a melted version of the dataframe for interactive visualization
+# HDI stands for Human Development Index (HDI)
+df_melted <- data %>%
+  select('Country', 'Human.Development.Groups', 'UNDP.Developing.Regions', 'HDI.Rank..2021.', 
+         'Inequality.in.Education..2010.', 'Inequality.in.Education..2011.',
+         'Inequality.in.Education..2012.', 'Inequality.in.Education..2013.',
+         'Inequality.in.Education..2014.', 'Inequality.in.Education..2015.',
+         'Inequality.in.Education..2016.', 'Inequality.in.Education..2017.',
+         'Inequality.in.Education..2018.', 'Inequality.in.Education..2019.',
+         'Inequality.in.Education..2020.', 'Inequality.in.Education..2021.') %>%
+  pivot_longer(cols = starts_with("Inequality.in.Education"), 
+               names_to = "Year", 
+               values_to = "Inequality.in.Education") %>%
+  mutate(Year = as.integer(gsub("\\D", "", Year)))
+
+# Create a Shiny app
+ui <- fluidPage(
+  titlePanel("Inequality in Education vs HDI Rank (2021)"),
+  plotlyOutput("scatter_plot")
+)
+
+server <- function(input, output) {
+  
+  # Render the interactive scatter plot
+  output$scatter_plot <- renderPlotly({
+    fig <- df_melted %>%
+      plot_ly(x = ~`HDI.Rank..2021.`, 
+              y = ~`Inequality.in.Education`, 
+              color = ~`Human.Development.Groups`,
+              frame = ~Year, 
+              text = ~Country,
+              type = 'scatter',
+              mode = 'markers',
+              marker = list(size = 10),
+              range = list(y = c(0, max(df_melted$`Inequality in Education`) + 5))) %>%
+      layout(title = 'Inequality in Education vs HDI Rank (2010-2021)',
+             xaxis = list(title = 'HDI Rank (2021)'),
+             yaxis = list(title = 'Inequality in Education'),
+             autosize = FALSE,
+             width = 800,
+             height = 600)
+    
+    fig
+  })
+}
+
+# Run the Shiny app
+shinyApp(ui, server)
+```
+```{r}
+# Convert columns related to "Inequality in Education" to numeric
+inequality_columns <- grep("Inequality.in.Education", names(data), value = TRUE)
+data[inequality_columns] <- lapply(data[inequality_columns], as.numeric)
+
+# Create a Shiny app
+ui <- fluidPage(
+  titlePanel("Average Inequality in Education for Each UNDP Developing Region (2010-2021)"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("region_input", "Select UNDP Developing Region", choices = unique(data$UNDP.Developing.Regions)),
+    ),
+    mainPanel(
+      plotOutput("line_plot")
+    )
+  )
+)
+
+server <- function(input, output) {
+  
+  # Filter data based on selected region, excluding rows with NAs
+  filtered_data <- reactive({
+    req(input$region_input)
+    df_region_mean_long %>%
+      filter(`UNDP.Developing.Regions` == input$region_input)
+  })
+
+  # Render the line plot
+  output$line_plot <- renderPlot({
+    ggplot(data = filtered_data(), aes(x = as.factor(Year), y = Average_Inequality, group = `UNDP.Developing.Regions`, color = `UNDP.Developing.Regions`)) +
+      geom_line() +
+      labs(title = paste("Average Inequality in Education (2010-2021) -", input$region_input),
+           x = "Year",
+           y = "Average Inequality in Education") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      scale_color_discrete(name = "UNDP Developing Region")
+  })
+}
+
+# Run the Shiny app
+shinyApp(ui, server)
+```
+
